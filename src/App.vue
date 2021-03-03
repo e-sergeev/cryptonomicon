@@ -40,34 +40,25 @@
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
                 v-model="ticker"
-                @keydown.enter="add"
+                @keydown.enter="add()"
               />
             </div>
             <div
+              v-if="this.ticker && shortList.length"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="(coin, idx) in shortList"
+                :key="idx"
+                @click="add(coin.Symbol)"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ coin.Symbol }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="isTickerExists" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -185,15 +176,42 @@ export default {
       ticker: "",
       tickers: [],
       graph: [],
-      sel: null
+      sel: null,
+      tickerExists: false,
+      coinsList: null
     };
   },
+  computed: {
+    isTickerExists() {
+      return this.tickers.find(
+        item => item.name.toUpperCase() === this.ticker.toUpperCase()
+      );
+    },
+    shortList() {
+      if (!this.coinsList) return null;
+      return Object.keys(this.coinsList)
+        .map(key => this.coinsList[key])
+        .filter(
+          item =>
+            item.Symbol.toUpperCase() === this.ticker.toUpperCase() ||
+            item.FullName.toUpperCase().includes(this.ticker.toUpperCase())
+        )
+        .splice(0, 4);
+    }
+  },
   methods: {
-    add() {
+    add(symbol = null) {
+      if (symbol) {
+        this.ticker = symbol;
+      }
+
+      if (this.isTickerExists) return;
+
       const currentTicker = {
-        name: this.ticker,
+        name: this.ticker.toUpperCase(),
         value: "-"
       };
+
       this.tickers.push(currentTicker);
 
       setInterval(async () => {
@@ -223,7 +241,17 @@ export default {
       return this.graph.map(
         price => 5 + ((price - minValue) * 100) / (maxValue - minValue)
       );
+    },
+    async getCoinsList() {
+      const list = await fetch(
+        "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+      );
+      const { Data } = await list.json();
+      this.coinsList = Data;
     }
+  },
+  created() {
+    this.getCoinsList();
   }
 };
 </script>
