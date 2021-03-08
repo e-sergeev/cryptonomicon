@@ -40,7 +40,7 @@
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
                 v-model="ticker"
-                @keydown.enter="add()"
+                @keydown.enter="add"
               />
             </div>
             <div
@@ -50,7 +50,10 @@
               <span
                 v-for="(coin, idx) in shortList"
                 :key="idx"
-                @click="add(coin.Symbol)"
+                @click="
+                  ticker = coin.Symbol;
+                  add();
+                "
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
                 {{ coin.Symbol }}
@@ -82,12 +85,73 @@
           Добавить
         </button>
       </section>
+      <hr class="w-full border-t border-gray-600 my-4" />
+      <div class="flex">
+        <div class="max-w-xs">
+          <p
+            @click="page--"
+            v-if="page > 1"
+            class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            <span class="sr-only">Previous</span>
+            <!-- Heroicon name: solid/chevron-left -->
+            <svg
+              class="h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </p>
+          <p
+            v-if="hasNextPage"
+            @click="page++"
+            class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            <span class="sr-only">Next</span>
+            <!-- Heroicon name: solid/chevron-right -->
+            <svg
+              class="h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </p>
+          <div class="mt-1 flex rounded-md shadow-sm">
+            <span
+              class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm"
+            >
+              ФИЛЬТР
+            </span>
+            <input
+              v-model="filter"
+              type="text"
+              name="filter"
+              class="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full rounded-none rounded-r-md sm:text-sm border-gray-300"
+              placeholder="Введите текст..."
+            />
+          </div>
+        </div>
+      </div>
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
-            v-for="t in tickers"
+            v-for="t in filteredTickers()"
             :key="t.name"
             @click="select(t)"
             :class="{ 'border-4': sel === t }"
@@ -178,45 +242,69 @@ export default {
       graph: [],
       sel: null,
       tickerExists: false,
-      coinsList: null
+      coinsList: null,
+      page: 1,
+      filter: "",
+      hasNextPage: true
     };
+  },
+  watch: {
+    filter() {
+      this.page = 1;
+      history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+    page() {
+      history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    }
   },
   computed: {
     isTickerExists() {
-      return this.tickers.find(
-        item => item.name.toUpperCase() === this.ticker.toUpperCase()
-      );
+      return this.tickers.find(item => item.name === this.ticker);
     },
     shortList() {
-      if (!this.coinsList) return null;
       return Object.keys(this.coinsList)
         .map(key => this.coinsList[key])
         .filter(
           item =>
-            item.Symbol.toUpperCase() === this.ticker.toUpperCase() ||
-            item.FullName.toUpperCase().includes(this.ticker.toUpperCase())
+            item.Symbol === this.ticker || item.FullName.includes(this.ticker)
         )
         .splice(0, 4);
     }
   },
   methods: {
-    add(symbol = null) {
-      if (symbol) {
-        this.ticker = symbol;
-      }
+    filteredTickers() {
+      const start = (this.page - 1) * 6;
+      const end = this.page * 6;
+      const filtered = this.tickers.filter(ticker =>
+        ticker.name.includes(this.filter)
+      );
 
+      this.hasNextPage = filtered.length > end;
+
+      return filtered.slice(start, end);
+    },
+    add() {
       if (this.isTickerExists) return;
 
       const currentTicker = {
-        name: this.ticker.toUpperCase(),
+        name: this.ticker,
         value: "-"
       };
 
+      this.filter = "";
       this.tickers.push(currentTicker);
 
       localStorage.setItem("tickersList", JSON.stringify(this.tickers));
 
-      this.update(currentTicker.name);
+      this.subscribeToUpdates(currentTicker.name);
 
       this.ticker = "";
     },
@@ -245,7 +333,7 @@ export default {
       const maxValue = Math.max(...this.graph);
       const minValue = Math.min(...this.graph);
       return this.graph.map(
-        price => 5 + ((price - minValue) * 100) / (maxValue - minValue)
+        price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
     },
     async getCoinsList() {
@@ -258,6 +346,16 @@ export default {
   },
   created() {
     const storedTickers = localStorage.getItem("tickersList");
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
+
+    if (windowData.filter) {
+      this.filter = windowData.filter;
+    }
+    if (windowData.page) {
+      this.page = windowData.page;
+    }
 
     if (storedTickers) {
       this.tickers = JSON.parse(storedTickers);
